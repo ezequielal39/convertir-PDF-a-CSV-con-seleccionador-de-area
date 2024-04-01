@@ -1,0 +1,141 @@
+import tkinter as tk
+from tkinter import filedialog
+import os
+from PyPDF2 import PdfReader
+
+class SeleccionadorArea:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Seleccionador de Área")
+        self.canvas = tk.Canvas(self.master, width=800, height=600, bg="white")
+        self.canvas.pack()
+        self.rect = None
+        self.start_x = None
+        self.start_y = None
+        self.end_x = None
+        self.end_y = None
+        self.canvas.bind("<ButtonPress-1>", self.on_button_press)
+        self.canvas.bind("<B1-Motion>", self.on_move_press)
+        self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
+        self.master.bind("<Escape>", self.cancelar_seleccion)
+
+    def on_button_press(self, event):
+        self.start_x = event.x
+        self.start_y = event.y
+        if self.rect:
+            self.canvas.delete(self.rect)
+        self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, 1, 1, outline="blue")
+
+    def on_move_press(self, event):
+        self.end_x = event.x
+        self.end_y = event.y
+        self.canvas.coords(self.rect, self.start_x, self.start_y, self.end_x, self.end_y)
+
+    def on_button_release(self, event):
+        self.end_x = event.x
+        self.end_y = event.y
+        self.master.quit()
+
+    def get_area(self):
+        if self.start_x is None or self.start_y is None or self.end_x is None or self.end_y is None:
+            return None
+        else:
+            return [min(self.start_x, self.end_x), min(self.start_y, self.end_y), max(self.start_x, self.end_x), max(self.start_y, self.end_y)]
+
+    def cancelar_seleccion(self, event):
+        self.start_x = None
+        self.start_y = None
+        self.end_x = None
+        self.end_y = None
+        self.master.quit()
+
+class SeleccionadorPaginas:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Seleccionar Página")
+        self.label = tk.Label(self.master, text="Ingrese el número de página:")
+        self.label.pack()
+        self.entry = tk.Entry(self.master)
+        self.entry.pack()
+        self.entry.focus_set()
+        self.boton_aceptar = tk.Button(self.master, text="Aceptar", command=self.aceptar)
+        self.boton_aceptar.pack()
+
+    def aceptar(self):
+        pagina = self.entry.get()
+        self.master.quit()
+        convertir_pdf_a_csv(ruta_pdf, int(pagina), area_seleccionada)
+
+def seleccionar_archivo():
+    ruta_archivo = filedialog.askopenfilename(title="Seleccionar archivo PDF")
+    if ruta_archivo:
+        seleccionar_pagina_y_area(ruta_archivo)
+
+def seleccionar_pagina_y_area(ruta_pdf):
+    root = tk.Tk()
+    seleccionador_pagina = SeleccionadorPaginas(root)
+    root.mainloop()
+    pagina_seleccionada = seleccionador_pagina.entry.get()
+    if not pagina_seleccionada.isdigit():
+        print("Por favor, ingrese un número de página válido.")
+        return
+    pagina_seleccionada = int(pagina_seleccionada)
+    if pagina_seleccionada <= 0:
+        print("El número de página debe ser mayor que cero.")
+        return
+    elif pagina_seleccionada > obtener_numero_paginas(ruta_pdf):
+        print("El número de página es mayor que el número total de páginas en el PDF.")
+        return
+    root = tk.Tk()
+    seleccionador_area = SeleccionadorArea(root)
+    root.mainloop()
+    global area_seleccionada
+    area_seleccionada = seleccionador_area.get_area()
+    if area_seleccionada:
+        print("Área seleccionada:", area_seleccionada)
+        convertir_pdf_a_csv(ruta_pdf, pagina_seleccionada)
+    else:
+        print("Selección cancelada")
+
+def obtener_numero_paginas(ruta_pdf):
+    with open(ruta_pdf, "rb") as archivo_pdf:
+        pdf_reader = PdfReader(archivo_pdf)
+        return len(pdf_reader.pages)
+
+def convertir_pdf_a_csv(ruta_pdf, pagina):
+    # Obtener el nombre del archivo sin la extensión
+    nombre_archivo = os.path.splitext(os.path.basename(ruta_pdf))[0]
+    # Generar nombre único para el archivo CSV
+    contador = 1
+    while True:
+        nombre_csv = f"{nombre_archivo}_{contador}.csv"
+        if not os.path.exists(nombre_csv):
+            break
+        contador += 1
+    # Ruta donde se guardará el archivo CSV (misma carpeta que el script)
+    ruta_script = os.path.dirname(os.path.abspath(__file__))
+    ruta_csv = os.path.join(ruta_script, nombre_csv)
+    
+    # Extraer datos del PDF usando PyPDF2
+    with open(ruta_pdf, "rb") as archivo_pdf:
+        pdf_reader = PdfReader(archivo_pdf)
+        if 0 < pagina <= len(pdf_reader.pages):
+            pagina_seleccionada = pdf_reader.pages[pagina - 1]
+            texto_pagina = pagina_seleccionada.extract_text()
+            # Guardar el texto de la página seleccionada en un archivo CSV
+            with open(ruta_csv, "w") as archivo_csv:
+                archivo_csv.write(texto_pagina)
+            print(f"Se ha guardado el contenido de la página {pagina} del PDF en el archivo CSV: {ruta_csv}")
+        else:
+            print(f"El número de página {pagina} está fuera de rango.")
+
+# Crear la ventana principal de la aplicación
+ventana = tk.Tk()
+ventana.title("Convertir PDF a CSV")
+
+# Botón para seleccionar archivo PDF
+boton_abrir = tk.Button(ventana, text="Seleccionar archivo PDF", command=seleccionar_archivo)
+boton_abrir.pack(pady=10)
+
+# Ejecutar la aplicación
+ventana.mainloop()
